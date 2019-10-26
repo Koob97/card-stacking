@@ -1,0 +1,104 @@
+<div class="container-fluid bg-3 text-center" id="default"> 
+    <h2 style="color: #F34A17">CD Card Stacking Funzone</h2>
+    <div class="row">
+      <div class="col-sm-6" style="color:white !important">
+        <a style="color:white" onclick="change()"><h3>Create Game</h3></a>
+      </div>
+      <div class="col-sm-6" style="color:white !important">
+          <a style="color:white" onclick="change2()"><h3>Join Game</h3></a>
+      </div>
+    </div>
+  </div>
+
+<div class="container-fluid bg-3 text-center" id="newgame"> 
+        <h2 style="color: #F34A17">CD Card Stacking Funzone</h2>
+            <label for="usr" style="color:white">Enter Your Name</label>
+            <input type="text" class="form-control" id="usrHero" placeholder="Bruce Wayne">
+            <a href="/game"><button class="btn">Create</button></a> <button class="btn" onclick="toHome()">Go Back</button>
+</div>
+
+<div class="container-fluid bg-3 text-center" id="joingame" style="height:35%"> 
+    <h2 style="color: #F34A17">CD Card Stacking Funzone</h2>
+    <form>
+            <label for="code" style="color:white">Enter Game Code</label>
+            <input type="text" class="form-control" id="code" placeholder="xxxxxx">
+            <label for="usr" style="color:white">Enter Your Name</label>
+            <input type="text" class="form-control" id="usrHero2"  placeholder="Bruce Wayne">
+            <input type="submit" class="btn">
+            <button class="btn" onclick="toHome2()">Go Back</button>
+    </form>
+</div>
+
+<script>
+   var heroNames = ['Bruce Wayne', 'Clark Kent', 'Victor Stone', 'Arthur Curry', 'Diana Prince', 'Jay Garrick', 'Hal Jordan'];
+  function getHero() {
+    var name = heroNames[Math.floor(Math.random()*heroNames.length)];
+    document.getElementById('usrHero').placeholder = name;
+  };
+  function getHero2() {
+    var name = heroNames[Math.floor(Math.random()*heroNames.length)];
+    document.getElementById('usrHero2').placeholder = name;
+  };
+  function change() {
+    getHero();
+    document.getElementById("newgame").style.display = "block";
+    document.getElementById("default").style.display = "none";
+  };
+  function change2() {
+    getHero2();
+    document.getElementById("joingame").style.display = "block";
+    document.getElementById("default").style.display = "none";
+  };
+  function toHome() {
+    document.getElementById("newgame").style.display = "none";
+    document.getElementById("default").style.display = "block";
+  };
+  function toHome2() {
+    document.getElementById("joingame").style.display = "none";
+    document.getElementById("default").style.display = "block";
+  };
+</script>
+
+<style>
+  a:hover {
+    text-decoration: none;
+  }
+  .btn {
+    background-color: #F34A17;
+    color: white;
+  }
+  #newgame {
+    display: none;
+  }
+  #joingame {
+    display: none;
+  }
+  .container-fluid {
+    border: 5px solid white;
+    width: 35%;
+    height: 25%;
+    position: relative;
+    top: 350px;
+    margin: 0 auto;
+    box-shadow: 0 0 15px white;
+  }
+
+  .container-fluid h3:hover{
+    color: #F34A17 !important;
+  }
+</style>
+
+<style type="text/css">
+  @font-face {
+      font-family: "My Custom Font";
+      src: url(comic.ttf) format("truetype");
+  }
+  .container-fluid h2{ 
+      font-family: "My Custom Font", Verdana, Tahoma;
+      padding-bottom: 25px;
+  }
+
+  .container-fluid h3{ 
+      font-family: "My Custom Font", Verdana, Tahoma;
+  }
+  </style>

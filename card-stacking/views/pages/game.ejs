@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html>
+<head>
+        <% include ../partials/header.ejs %>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+        <script src="jqueryshadows.js"></script>
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+        function startGoingDown(eleid){
+                $(eleid).animate({boxShadow: '2px 2px 5px #000000', top: '3px'}, 250)
+        }
+
+        function stopGoingDown(eleid){
+                $(eleid).stop()
+                $(eleid).animate({boxShadow: '5px 5px 10px #000000', top: '0px'}, 250)
+        }
+
+        $(document).ready(function(){
+                //for the end turn button
+                $('#endTurnButton').mousedown(function(){
+                        startGoingDown('#endTurnButton');
+                })
+                $('#endTurnButton').mouseup(function(){
+                        stopGoingDown('#endTurnButton');
+                })
+
+                //kick button
+                $('#kick').mousedown(function(){
+                        startGoingDown('#kick');
+                })
+                $('#kick').mouseup(function(){
+                        stopGoingDown('#kick');
+                })
+
+                //deselect kick button
+                $('#unkick').mousedown(function(){
+                        startGoingDown('#unkick');
+                })
+                $('#unkick').mouseup(function(){
+                        stopGoingDown('#unkick');
+                })
+
+
+        })
+
+        var socket = io();
+        socket.on('joinedRoom', function(data){
+                document.getElementById('room').innerHTML = "You are in room " + data.room;
+        });
+        socket.on('newMessage', function(data){
+                var msg = data.message.toString();
+                var newMsg = document.createElement('li');
+                newMsg.innerHTML = msg;
+                newMsg.className = "list-group-item"
+                document.getElementById('chatBox').appendChild(newMsg);
+                $('#chatBox').animate({scrollTop: $('#chatBox').prop("scrollHeight")}, 500);
+        });
+        socket.on('setHero', function(data){
+                var heroname = data.name.toString();
+                document.getElementById(heroname).style.display = 'block';
+                player_hero = heroname;
+        });
+        socket.on('begin', function(){
+                document.getElementById('intro').style.display = 'none';
+                document.getElementById('superVillains').style.display = 'block';
+                document.getElementById('buyableCards').style.display = 'block';
+                document.getElementById('handContainer').style.display = 'block';
+        });
+        socket.on('reset', function(){
+                //reset hero selection process
+                document.getElementById("Batman").style.display = "none"; 
+                document.getElementById("Superman").style.display = "none";
+                document.getElementById("Wonderwoman").style.display = "none";
+                document.getElementById("Aquaman").style.display = "none";
+                document.getElementById("Green Lantern").style.display = "none";
+                document.getElementById("Cyborg").style.display = "none";
+                document.getElementById("The Flash").style.display = "none";
+                document.getElementById("heroPicker").style.display = 'block';
+
+                //get rid of end game text if it is there
+                document.getElementById('endGameContainer').innerHTML = "";
+
+                //get rid of turn text until game starts
+                document.getElementById("turnHolder").innerHTML = "";
+
+                //none of the overall UI should be visible 
+                document.getElementById('superVillains').style.display = 'none';
+                document.getElementById('buyableCards').style.display = 'none';
+                document.getElementById('handContainer').style.display = 'none';
+
+                //only display the intro instructional text 
+                document.getElementById('intro').style.display = 'block';
+
+                //five cards and one super villain
+                lineup_selected = [0,0,0,0,0,0];
+
+                //reset your turn variable
+                yourTurn = false;
+
+                //reset super villain info
+                document.getElementById('superVillainName').innerHTML = vil;
+                document.getElementById('superVillainPic').src = "https://www.cryptozoic.com/sites/default/files/artwork-images/dc_ras_al_ghul.png";
+
+                for(var i = 0; i < 5; i++){
+                        document.getElementById("lineup" + i.toString()).innerHTML = "";
+                }
+
+                for(var i = 0; i<5; i++){
+                        document.getElementById("hand" + i).innerHTML = "";
+                        document.getElementById("hand" + i.toString() + "pic").style.display = "block";
+                }
+                lineup = [];
+                power = 0; //used for total hand power
+                hand_active = [0,0,0,0,0];
+                document.getElementById('power').innerHTML = power;
+                for(var i = 0; i<hand_active.length; i++){
+                        document.getElementById("hand" + i).innerHTML = "";
+                }
+
+                hand = [];
+                player_hero = "";
+        });
+        var hand = [];
+        var maxHand = 10;
+        socket.on('newHand', function(data){
+                socket.emit('log',{
+                        message: "i got a new hand"
+                })
+                hand = data.hand;
+                
+                for(var i = 0; i<hand.length; i++){
+                        //fill in the html for the cards in the hand - info stored here used when calling getPower(int) 
+                        document.getElementById("hand" + i).innerHTML = hand[i];
+
+                        //make sure all cards in hand are visible by player
+                        document.getElementById("hand" + i.toString() + "pic").style.display = "block";
+                }
+
+                //make all other card spots invisible 
+                for(var i = hand.length; i<maxHand; i++){
+                        document.getElementById("hand" + i.toString() + "pic").style.display = "none";
+                }
+
+                handPhotos(data.respondForSV);
+        })
+        socket.on('quantUpdate', function(data){
+                var num = data.players;
+                document.getElementById('numPlayers').innerHTML = "Online: " + num.toString();
+        })
+        var yourTurn = false; 
+        var lineup = [];
+        //notify the player that they can now interact with the line up 
+        socket.on('yourTurn',function(data){
+                yourTurn = true;
+                haveDrawnCard = false;
+                document.getElementById("turnHolder").innerHTML = "Turn: You";
+                lineup = data.lineup;
+                for(var i = 0; i < 5; i++){
+                        document.getElementById("lineup" + i.toString()).innerHTML = lineup[i];
+                }
+                lineupPhotos();
+        });
+
+        //notify player of someone's turn beginning
+        socket.on('othersTurn',function(data){
+                yourTurn = false;
+                document.getElementById("turnHolder").innerHTML = "Turn: " + data.other.toString();
+                lineup = data.lineup;
+                for(var i = 0; i < 5; i++){
+                        document.getElementById("lineup" + i.toString()).innerHTML = lineup[i];
+                }
+                lineupPhotos();
+        });
+        //for receiving the top card after requested
+        socket.on('returnTopCard', function(data){
+                topCard = data.card;
+                if(topCard == ""){
+                        alert("You played Nth Metal but your deck was empty");
+                        return;
+                }
+                if(confirm('You played Nth Metal! The top card of your deck is ' + topCard.toString() + ". Press OK to destroy it, press cancel to keep it on the top of your deck.") == true){
+                                socket.emit('destroyTopCard');
+                }
+        });
+
+        var topCard = 'punch';
+        //set photos for the lineup
+        function lineupPhotos(){
+                for(var i = 0; i < 5; i++){
+                        if(lineup[i] == 'bane')
+                                document.getElementById('line' + i.toString() + 'pic').src = 'dc_bane.png'
+                        if(lineup[i] == 'nth metal')
+                                document.getElementById('line' + i.toString() + 'pic').src = 'nthmetal.png'
+                        if(lineup[i] == 'green arrow')
+                                document.getElementById('line' + i.toString() + 'pic').src = 'dc_green_arrow.png'
+                        if(lineup[i] == 'fastest man alive')
+                                document.getElementById("line"+i.toString()+"pic").src = 'fastestman.png';
+                }
+        }
+
+        updatePhotoscount = 0;
+        //set photo to be the one relevant to the card type
+        function handPhotos(respondForSV){
+                $(".handPic").animate({
+                        opacity: '.0'
+                }, 1000, updatePhotos);
+
+                if(respondForSV){
+                        socket.emit('newSV');
+                }
+        }
+        function updatePhotos(){
+                updatePhotoscount = updatePhotoscount + 1;
+                if(updatePhotoscount != hand.length)
+                        return;
+                for(var i = 0; i<hand.length; i++){
+                        if(hand[i] == 'weakness')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'dc_weakness.png';
+                        if(hand[i] == 'punch')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'dc_punch.png';
+                        if(hand[i] == 'vulnerability')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'vulnerability.png';
+                        if(hand[i] == 'nth metal')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'nthmetal.png';
+                        if(hand[i] == 'kick')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'dc_kick.png';
+                        if(hand[i] == 'bane')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'dc_bane.png';
+                        if(hand[i] == 'green arrow')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'dc_green_arrow.png';
+                        if(hand[i] == 'fastest man alive')
+                                document.getElementById("hand"+i.toString()+"pic").src = 'fastestman.png';
+                        if(hand[i] == 'ras al ghul')
+                                document.getElementById("hand" + i.toString() + "pic").src = "https://www.cryptozoic.com/sites/default/files/artwork-images/dc_ras_al_ghul.png"; 
+                }
+
+                $(".handPic").animate({
+                        opacity: '1'
+                }, 1000);
+                updatePhotoscount = 0;
+        }
+
+        //initialize player hero variable
+        var player_hero = "";
+
+        socket.on('attacked', function(data){
+                num = data.num;
+                type = data.type;
+                
+                if(type == 'discard'){
+                        if(num == 1){
+                                notconfirmed = true;
+                                i = 0;
+                                while(notconfirmed){
+                                        if(confirm("You must discard a card. To discard " + hand[i] +", press OK. Press cancel to cycle to next card in hand") == true){
+                                                notconfirmed = false;
+                                                socket.emit('discard',{
+                                                        index: i,
+                                                        currHand: hand
+                                                })
+                                        } 
+                                        if(i < hand.length - 1)
+                                                i++;
+                                        else if(i == hand.length - 1)
+                                                i = 0;
+                                }
+                        }
+                }
+        });
+
+        //for when a new super villain is being broadcasted
+        socket.on('newVillain', function(data){
+                vil = data.villain;
+                document.getElementById('superVillainName').innerHTML = vil;
+                villainPhoto();
+        });
+
+        socket.on('leftRoom', function(){
+                document.getElementById('room').innerHTML = ""
+        });
+
+        socket.on('SVattack', function(data){
+                villain = data.villain;
+                if(villain == 'The Joker'){
+                        notconfirmed = true;
+                        i = 0;
+                        while(notconfirmed){
+                                socket.emit('log', {
+                                        message: i
+                                })
+                                if(confirm("The Joker is attacking. You must discard a card to the person next in the order from you. If the card has cost 1 or greater, the other player gains a weakness. Do you want to discard " + hand[i] + "? Press cancel to go to next card, OK for this one.") == true){
+                                        notconfirmed = false
+                                        socket.emit('log', {
+                                        message: i
+                                })
+                                        socket.emit('discardToLeft', {
+                                                index: i
+                                        });
+                                        continue;
+                                }
+                                if(i<hand.length-1)
+                                        i = i + 1;
+                                else
+                                        i = 0;
+
+                        }
+                }
+        });
+
+        function villainPhoto(){
+                vil = document.getElementById('superVillainName').innerHTML;
+                switch(vil){
+                        case 'ras al ghul':
+                                document.getElementById('superVillainPic').src = "https://www.cryptozoic.com/sites/default/files/artwork-images/dc_ras_al_ghul.png";
+                                break;
+                        case 'The Joker':
+                                document.getElementById('superVillainPic').src = "joker.png"
+                }
+        }
+
+        function openIntro(){
+                var inst = $('[data-remodal-id=modal]').remodal();
+                inst.open()
+        }
+        
+        </script>
+</head>
+<body style="background-color:#313131">
+        <audio controls>
+                <source src="dan.mp3" type="audio/mpeg">
+        </audio>
+        <div id="leftSide">
+                <div id="superChat">
+                <form action="javascript:changeName(document.getElementById('nameChange').value)">
+                                <input type="text" class="form-control" id="nameChange" autocomplete="off">
+                                <input type="submit" class="btn" value = "Change Name!"> 
+                </form>
+                <form action="javascript:sendMessage(document.getElementById('chatMsg').value)">
+                        <input type="text" class="form-control" id="chatMsg" autocomplete="off">
+                        <input type="submit" class="btn" value = "Super Send!"> 
+                </form>
+                <ul id="chatBox" class="list-group">
+                </ul>
+                </div>
+                <button onclick="pickHero()" class="btn" id="heroPicker" style="width:100%; height: calc( 100% - 470px);">Click Me To Get Your Hero!</button>
+                <img class="hero" src="https://res.cloudinary.com/teepublic/image/private/s--Pzn-mZoK--/t_Preview/b_rgb:191919,c_limit,f_jpg,h_630,q_90,w_630/v1449077408/production/designs/86464_1.jpg" id="Batman">
+                <img class="hero" src="https://wallpaperscraft.com/image/justice_league_superman_dc_comics_minimalism_99613_1920x1080.jpg" id="Superman">
+                <img class="hero" src="https://res.cloudinary.com/teepublic/image/private/s--ppLwTux---/t_Preview/b_rgb:6e2229,c_limit,f_jpg,h_630,q_90,w_630/v1496541859/production/designs/1644380_1.jpg" id="Wonderwoman">
+                <img class="hero" src="http://hdqwalls.com/wallpapers/aquaman-minimalism-image.jpg" id="Aquaman">
+                <img class="hero" src="https://hdqwalls.com/wallpapers/green-lantern-minimalism-wide.jpg" id="Green Lantern">
+                <img class="hero" src="https://s-media-cache-ak0.pinimg.com/originals/01/98/5f/01985f6216dbb04452c1191993d2a952.jpg" id="Cyborg">
+                <img class="hero" src="http://overtbuzz.com/image.php?src=5IXhfEAmrlgtLNoEwtaUxrXiNnBwMiQR0O9gsKCU6ToRHMwdfG" id="The Flash">
+        </div>
+
+        <div id="center">
+                <div id="playerNumber">
+                <p id="numPlayers"></p>
+                <p id="room"></p>
+                </div>
+
+                <div id="turnContainer">
+                        <p id="turnHolder"></p>
+                </div>
+
+                <div id="intro">
+                        <h2>Welcome to CD Card Stacking Funzone</h2>
+                        <h2>Join a room by saying JOIN ROOM [6 character code]</h2>
+                        <h2>Everyone select your heroes in the bottom left</h2>
+                        <h2>When ready, type START to begin the game</h2>
+                        <h2>To reset the roles before starting type RESET</h2>
+                        <h2>To reset the game during gameplay type RESET</h2>
+                </div>
+
+                <div id="superVillains" style="float: right; width: 50%; display: none">
+                        <p id="superVillainName" style="display: none">ras al ghul</p>
+                        <img onclick="selectLineup(this)" id="superVillainPic" src="https://www.cryptozoic.com/sites/default/files/artwork-images/dc_ras_al_ghul.png" style="width:15%; position: absolute; right:0; top:0">
+                </div>
+                <div id="buyableCards" style="display:none; text-align:center">
+                        <h3 style="font-size: 300%">Line Up</h3>
+
+                        <button id="endTurnButton" style="float: left"class="btn" onclick="endTurn()">Buy and End Turn</button>
+                        
+                        <div class="line" id="line0" style="text-align: center">
+                                <p id="lineup0" style="display:none"></p>
+                                <img class="linePic" id="line0pic" src = "" onclick="selectLineup(this)">
+                        </div>
+
+                        <div class="line" id="line1" style="text-align: center">
+                                        <p id="lineup1" style="display:none"></p>
+                                        <img class="linePic" id="line1pic" src = "" onclick="selectLineup(this)">
+                        </div>
+
+                        <div class="line" id="line2" style="text-align: center">
+                                        <p id="lineup2" style="display:none"></p>
+                                        <img class="linePic" id="line2pic" src = "" onclick="selectLineup(this)">
+                        </div>
+
+                        <div class="line" id="line3" style="text-align: center">
+                                        <p id="lineup3" style="display:none"></p>
+                                        <img class="linePic" id="line3pic" src = "" onclick="selectLineup(this)">
+                        </div>
+                        
+                        <div class="line" id="line4" style="text-align: center">
+                                        <p id="lineup4" style="display:none"></p>
+                                        <img class="linePic" id="line4pic" src = "" onclick="selectLineup(this)">
+                        </div>
+                        
+
+                        <button id="kick" class="btn" onclick="selectLineup(this)" style="display: block; clear:both; margin-bottom: 20px">Kick 0</button>
+                        <button id="unkick" class="btn" onclick="selectLineup(this)" style="display: block; clear:both">Deselect Kick</button>
+                </div>
+
+                <div id="handContainer" style="margin-top: 150px; display:none; text-align:center;">
+
+                        <h3 style="font-size: 300%; display: block;">Hand</h3>
+                        <h3 style="display: inline-block;">Power: </h3>
+                        <p style="display: inline-block;" id="power">0</p>
+
+                        <div class="line" id="card0" style="text-align:center">
+                                        <p id="hand0" onclick="getPower(0)" style="display: none"></p>
+                                        <img class="handPic" id="hand0pic" src="dc_punch.png" onclick="getPower(0)">
+                        </div>
+                
+                        <div class="line" id="card1" style="text-align:center">
+                                        <p id="hand1" onclick="getPower(1)" style="display: none"></p>
+                                        <img class="handPic" id="hand1pic" src="dc_punch.png" onclick="getPower(1)">
+                        </div>
+
+                        <div class="line" id="card2" style="text-align:center">
+                                        <p id="hand2" onclick="getPower(2)" style="display: none"></p>
+                                        <img class="handPic" id="hand2pic" src="dc_punch.png"onclick="getPower(2)">
+                        </div> 
+
+                        <div class="line" id="card3" style="text-align:center">
+                                        <p id="hand3" onclick="getPower(3)" style="display: none"></p>
+                                        <img class="handPic" id="hand3pic" src="dc_punch.png" onclick="getPower(3)">
+                        </div>
+
+                        <div class="line" id="card4" style="text-align:center">
+                                        <p id="hand4" onclick="getPower(4)" style="display: none"></p>
+                                        <img class="handPic" id="hand4pic" src="dc_punch.png" onclick="getPower(4)">
+                        </div>
+
+                        <div class="line" id="card5" style="text-align:center">
+                                        <p id="hand5" onclick="getPower(5)" style="display: none"></p>
+                                        <img class="handPic" id="hand5pic" src="dc_punch.png" onclick="getPower(5)">
+                        </div>
+
+                        <div class="line" id="card6" style="text-align:center">
+                                        <p id="hand6" onclick="getPower(6)" style="display: none"></p>
+                                        <img class="handPic" id="hand6pic" src="dc_punch.png" onclick="getPower(6)">
+                        </div>
+
+                        <div class="line" id="card7" style="text-align:center">
+                                        <p id="hand7" onclick="getPower(7)" style="display: none"></p>
+                                        <img class="handPic" id="hand7pic" src="dc_punch.png" onclick="getPower(7)">
+                        </div>
+
+                        <div class="line" id="card8" style="text-align:center">
+                                        <p id="hand8" onclick="getPower(8)" style="display: none"></p>
+                                        <img class="handPic" id="hand8pic" src="dc_punch.png" onclick="getPower(8)">
+                        </div>
+
+                        <div class="line" id="card9" style="text-align:center">
+                                        <p id="hand9" onclick="getPower(9)" style="display: none"></p>
+                                        <img class="handPic" id="hand9pic" src="dc_punch.png" onclick="getPower(9)">
+                        </div>
+
+                </div>
+
+                <div id="endGameContainer">
+                </div>
+
+        </div>
+        
+</body>
+<script>
+
+        /*
+//function to apply the powers of the player's superhero
+function applySuperPower(){
+        switch(player_hero){
+                case 'Batman':
+                        //increase power by n for n equipments played
+                        //MAKES SENSE TO IMPLEMENT INSIDE GET POWER FUNCTION
+                        //DONE
+                        break;
+                case 'Wonderwoman':
+                        //draw 6 cards next turn if they purchased a villain
+                        //MAKES SENSE TO IMPLEMENT INSIDE END TURN FUNCTION
+                        break;
+                case 'Superman':
+                        //increase power by n for n different super powers played
+                        //MAKES SENSE TO IMPLEMENT INSIDE GET POWER FUNCTION
+                        //SHOULD BE DONE
+                        break;
+                case 'Aquaman':
+                        //allow player to put any cards gained this turn cost 5 or less on top of their deck
+                        //END TURN FUNCTION
+                        break;
+                case 'Cyborg':
+                        //plus one power if super power played, draw one card if equipment played
+                        //GET POWER FUNCTION
+                        break;
+                case 'The Flash':
+                        //flash goes first - already implemented. The first time player draws a card during their turn, draw 2
+                        //GET POWER FUNCTION
+                        break;
+                case 'Green Lantern':
+                        //if player plays 3 cards with different names cost 1 or more, +3 power
+                        //GET POWER FUNCTION
+                        //SHOULD BE DONE
+                        break;
+                default:
+                        break;  
+        }
+}*/
+
+//when server says game is over
+socket.on('GAMEOVER', function(data){
+        vctpts = data.vctpts;
+        players = Object.keys(vctpts);
+        values = Object.values(vctpts);
+
+        header = document.createElement('p');
+        header.innerHTML = "GAME OVER";
+        document.getElementById('endGameContainer').appendChild(header);
+
+        //find winner
+        winname = players[0];
+        winval = values[0];
+        for(var i = 1; i<players.length; i++){
+                if(values[i] > winval)
+                        winname = players[i]
+        }
+        winner = document.createElement('p');
+        winner.innerHTML = "The winner is " + winname;
+        document.getElementById('endGameContainer').appendChild(winner);
+
+        //add a p element for each player/score 
+        for(var i = 0; i<players.length; i++){
+                score = document.createElement('p');
+                score.innerHTML = players[i] + ": " + values[i] + " victory points";
+                document.getElementById('endGameContainer').appendChild(score);
+        }
+
+        //dont show the rest of the UI
+        document.getElementById("turnHolder").innerHTML = "";
+        document.getElementById('superVillains').style.display = 'none';
+        document.getElementById('buyableCards').style.display = 'none';
+        document.getElementById('handContainer').style.display = 'none';
+        
+});
+
+//use to subtract arr2 from arr while removing on a one-to-one basis - takes away first instance it finds
+function removeFrom(arr,arr2) {
+  var newarr = arr;
+  for(var i = 0; i<arr2.length; i++){
+    for(var k = 0; k<newarr.length; k++){
+      if(arr2[i] == newarr[k]){
+        index = newarr.indexOf(newarr[k]);
+        newarr.splice(index,1);
+        break;
+      }
+    }
+  }
+  return newarr;
+}
+
+//all the logic that must be applied when a user wants to end their turn
+function endTurn(){
+        var wonderwoman = (player_hero == 'Wonderwoman')
+        var aquaman = (player_hero == 'Aquaman');
+        if(!yourTurn){
+                return;
+        }
+
+        //handling for playing ras al ghul - START
+        for(var i = 0; i<hand.length; i++){
+                if(hand[i] == 'ras al ghul'){
+                        socket.emit('placeBottomOfDeck', {
+                                card: 'ras al ghul'
+                        });
+                        break;
+                }
+        }
+        //handling for playing ras al ghul - END
+
+        document.getElementById('power').innerHTML = 0;
+
+        //array to store card names that were purchased
+        purchased = [];
+
+        //indexes of lineup to replace
+        toReplace = [];
+
+        boughtvil = false;
+        //get indexes to replace and push the cards purchased into an array
+        for(var i = 0; i<lineup_selected.length; i++){
+                if(lineup_selected[i] == 1){
+                        if(i == 5){
+                                socket.emit('log', {
+                                        message: "made it inside if"
+                                })
+                                //FIX THIS TO PUSH THE CURRENT SUPER VILLAIN
+                                currVillain = document.getElementById('superVillainName').innerHTML
+                                purchased.push(currVillain.toString());
+                                boughtvil = true;
+                                continue;
+                        }
+                        purchased.push(lineup[i]);
+                        toReplace.push(i);
+                }
+        }
+
+        //add kicks to the purchased array
+        for(var k = 0; k<numKicks; k++){
+                purchased.push('kick');
+        }
+
+        movedToTop = [];
+        //aquaman super power code
+        if(aquaman){
+                usable = [];
+                aboveFive = ['ras al ghul'];
+                //CHANGE LATER TO ONLY BE CARDS COST 5 OR LESS
+                for(var i =  0; i<purchased.length; i++){
+                        if(aboveFive.indexOf(purchased[i]))
+                                usable[i] = purchased[i];
+                }
+                //if cards cost 5 or below have been gained
+                if(usable.length != 0){   
+                        movedToTop = []; //will be used to subtract from purchased array
+
+                        //iterate over cards
+                        for(var i = 0; i<usable.length; i++){
+                                if(confirm("As Aquaman you can place any cards gained with cost 5 or less on top of your deck. Do you want to put " + usable[i] + " on top of your deck? Press OK for yes, cancel for No.")){
+                                        movedToTop.push(usable[i]);
+                                }
+                        }
+                        //if they want to move something to the top of their deck
+                        if(movedToTop.length != 0){
+                                purchased = removeFrom(purchased,movedToTop);
+                                socket.emit('pushToTop', {
+                                        cards: movedToTop
+                                });
+                }
+                }
+        }
+
+        //reset hand selected and lineup selected 
+        hand_active = [0,0,0,0,0];
+        lineup_selected = [0,0,0,0,0,0];
+        numKicks = 0;
+        document.getElementById('kick').innerHTML = "Kick 0"
+        //reset power to 0
+        power = 0;
+
+        //reset css
+        for(var i = 0; i < 5; i++){
+                document.getElementById("hand" + i.toString()).style.color = 'white';
+                document.getElementById("lineup" + i.toString()).style.color = 'white';
+
+                hid = "#hand" + i.toString() + "pic"
+                $(hid).animate({boxShadow: '15px 15px 35px #000000', top: '0px'}, 250);
+
+                lid = "#line" + i.toString() + "pic"
+                $(lid).animate({boxShadow: '15px 15px 35px #000000', top: '0px'}, 250);
+        }
+
+        //emit endTurn with all relevant info below
+        socket.emit('endTurn', {
+                bought: purchased.concat(movedToTop), //the names of the purchased cards
+                replace: toReplace,     //indexes of cards in lineup that have to be replaced
+                boughtvil: boughtvil
+        });
+
+        villains = ['bane'];
+        villain = false;
+        for(var i = 0; i<purchased.length; i++){
+                if(villains.indexOf(purchased[i]) != -1){
+                        villain = true;
+                        break;
+                }
+        }
+        if(wonderwoman && villain){
+                socket.emit('drawCard', {
+                        reason: "You are Wonder Woman and bought a villain so you drew an extra card in your next hand: "
+                });
+        }
+
+        //put this here so that the super villain would be changed after the player's turn completely ends
+        if(boughtvil){
+                document.getElementById('superVillainPic').style.boxShadow ='0 0 0px #0099ff';
+        }
+
+
+}
+//initialize lineup selected as all zeros
+var lineup_selected = [0,0,0,0,0,0];
+var numKicks = 0;
+
+//used to handle the event that a card in the lineup is selected
+function selectLineup(ele) {
+         //dont let the user use this if it isn't their turn
+        if(!yourTurn){
+                return;
+        }
+
+        //initialize cost variable
+        cost = 0;
+
+        //handle super villain selection
+        if(ele.id == 'superVillainPic'){
+                vil = document.getElementById('superVillainName').innerHTML.toString();
+                switch(vil){
+                        case 'ras al ghul':
+                                cost = 8
+                                break;
+                        case 'The Joker':
+                                cost = 10
+                                break;
+                        default:
+                                break;
+                }
+                num = 5;
+        }
+
+        //if not a super villain
+        else{
+        //handle kick button
+        if(ele.id == 'kick') {
+                cost = 3;
+
+                if (power >= cost){
+                power = power - cost;
+                numKicks = numKicks + 1;
+                document.getElementById('kick').innerHTML = "Kick " + numKicks.toString();
+                document.getElementById('power').innerHTML = power;
+                }
+
+                return;
+        }
+
+        if(ele.id == 'unkick' && numKicks>0){
+                numKicks = numKicks - 1;
+                power = power + 3;
+                document.getElementById('kick').innerHTML = "Kick " + numKicks.toString();
+                document.getElementById('power').innerHTML = power;
+                return;
+        }
+
+        imgID = ele.id;
+        id = "lineup" + imgID.substring(4,5)
+
+        num = imgID.substring(4,5);
+        num = parseInt(num);
+
+        //card type selected
+        val = document.getElementById(id).innerHTML.toString();
+
+        //get the cost of the one selected
+        switch(val){
+                case 'hero': 
+                        cost = 2;
+                        break;
+                case 'bane':
+                        cost = 4;
+                        break;
+                case 'nth metal':
+                        cost = 3;
+                        break;
+                case 'green arrow':
+                        cost = 5;
+                        break;
+                case 'fastest man alive':
+                        cost = 5;
+                        break;
+                default:
+                        break;
+        }
+        }
+        //if it was already selected before, add back the power to deselect
+        if(lineup_selected[num] == 1){
+                power = power + cost;
+                lineup_selected[num] = 0;
+                document.getElementById('power').innerHTML = power;
+                //if it was a super villain selected
+                if(num == 5){
+                        document.getElementById('superVillainPic').style.boxShadow ='0 0 0px #0099ff';
+                        return;
+                }
+                lid = "#line" + num.toString() + "pic"
+                $(lid).animate({boxShadow: '15px 15px 35px #000000', top: '0px'}, 250);
+        }
+
+        //else if the user has enough power to buy it, add it to lineup selected 
+        else if (power >= cost){
+                power = power - cost;
+                lineup_selected[num] = 1;
+                document.getElementById('power').innerHTML = power;
+                if(num == 5){
+                        document.getElementById('superVillainPic').style.boxShadow ='0 0 30px #0099ff';
+                        return;
+                }
+                lid = "#line" + num.toString() + "pic"
+                $(lid).animate({boxShadow: '0px 0px 0px #000000', top: '10px'}, 250);
+        }
+}
+
+var haveDrawnCard = false;
+var power = 0; //used for total hand power
+var hand_active = [0,0,0,0,0]; //keep track of which cards in hand have been played
+
+//used to play a card
+function getPower(handNum){
+        type = document.getElementById('hand'+ handNum.toString()).innerHTML.toString();
+        var pow = 0;
+        var playableOnce = ['nth metal', 'bane', 'fastest man alive'] //cards that have abilities more than just power
+        cyborg = (player_hero == 'Cyborg');
+        var flash = (player_hero == 'The Flash');
+        if(playableOnce.indexOf(type) != -1){
+                if(!yourTurn)
+                        return;
+                //return if it has already been played
+                if(hand_active[handNum] == 1)
+                        return;
+                //handling for nth metal specifically
+                if(type == 'nth metal'){
+                        //req top card
+                        socket.emit('requestTopCard');
+                        //code for handling after request is received is above inside returnTopCard in order to get around async problem
+                        if(cyborg){
+                                socket.emit('drawCard', {
+                                        reason: "You are Cyborg and played an equipment so you draw an extra card:  "
+                                });
+                        }
+                }
+
+                if(type == 'bane'){
+                        socket.emit('discardAttack', {
+                                num: 1
+                        })
+                }
+
+                //should generalize this to work without copy pasting this code to other cards that result in drawing
+                if(type == 'fastest man alive'){
+                        toDraw = 2;
+                        console.log(flash)
+                        if(flash && (haveDrawnCard == false)){
+                                haveDrawnCard = true;
+                                toDraw = 3;
+                        }
+                        for(var i = 0; i < toDraw; i++){
+                                socket.emit('drawCard', {
+                                        reason: "You played fastest man alive and drew: "
+                                });
+                        }
+                }
+        }
+        var batman = (player_hero == 'Batman');
+        var lantern = (player_hero == 'Green Lantern');
+        var superman = (player_hero == 'Superman');
+        //get the power of the card type
+        switch(type){
+                case 'weakness':
+                        pow = 0;
+                        break;
+                case 'punch':
+                        pow = 1;
+                        break;
+                case 'vulnerability':
+                        pow = 0;
+                        break;
+                case 'green arrow':
+                        pow = 2;
+                        break;
+                case 'bane':
+                        pow = 2;
+                        break;
+                case 'super villain':
+                        pow = 4;
+                        break;
+                case 'nth metal':
+                        if(batman)
+                                pow = 2;
+                        else
+                                pow = 1;
+                        break;
+                case 'kick':
+                        pow = 2;
+                        break;
+                case 'fastest man alive': 
+                        pow = 0;
+                        break;
+                case "ras al ghul":
+                        pow = 3;
+                        break;
+                default:
+                        break;
+        }
+
+        ifAdded = 0;
+        ifRemoved = 0;
+        
+        //green lantern super power code
+        if(lantern){
+                //account for number of cards cost 1 or greater played this turn
+                count = 0;
+                lessThanOne = ['punch', 'vulnerability']
+                prevCards = [];
+                for(var i = 0; i < hand_active.length; i++){
+                        if(hand_active[i] == 1){
+                                if(lessThanOne.indexOf(hand[i]) == -1 && prevCards.indexof(hand[i]) == -1){
+                                        prevCards.push(hand[i])
+                                        count = count + 1;
+                                }
+                        }
+                }
+
+                //if count 3 and removed, -3. if count 2 and added, +3.
+                if(count == 3 && lessThanOne.indexOf(type) == -1){
+                        ifRemoved = 3;
+                }
+                if(count == 2 && lessThanOne.indexOf(type) == -1){
+                        ifAdded = 3;
+                }
+        }
+        
+        //superman power code
+        if(superman || cyborg){
+                //list of all superpowers
+                superpowers = ['kick']
+                if(cyborg){
+                        //only care if the card we play is a superpower
+                        if(superpowers.indexOf(type) != -1){
+
+                        count = 0;
+                        //count how many superpowers have been played already
+                        for(var i = 0; i < hand_active.length; i++){
+                                if(hand_active[i] == 1){
+                                        if(superpowers.indexOf(hand[i]) != -1)
+                                                count = count + 1;
+                                }
+                        }
+                        if(count == 0)
+                                ifAdded = 1;
+                        if(count == 1)
+                                ifRemoved = 1;
+                        }
+                }
+                //if it is a superpower
+                if(superpowers.indexOf(type) != -1){
+                        count = 0;
+                        //count how many of this type are already active in hand
+                        for(var i = 0; i < hand_active.length; i++){
+                                if(hand_active[i] == 1){
+                                        if(hand[i] == type)
+                                                count = count + 1;
+                                }
+                        }
+
+                        //if removed and added stay zero unless count is equal to 1 and removed or count is equal to zero and added
+                        if(count == 1)
+                                ifRemoved = 1;
+                        if(count == 0)
+                                ifAdded = 1;
+                }
+        }
+        
+        //if already playing this card, undo it and remove from power total
+        if(hand_active[handNum] == 1){
+                pow = pow + ifRemoved;
+                if(power - pow < 0){
+                        return; 
+                }
+                power = power - pow;
+                document.getElementById('hand' + handNum.toString()).style.color ='white';
+
+                hid = "#hand" + handNum.toString() + "pic"
+                $(hid).animate({boxShadow: '15px 15px 35px #000000', top: '0px'}, 250);
+                hand_active[handNum] = 0
+        }
+        //otherwise, add it to the power
+        else{
+                pow = pow + ifAdded;
+                power = power + pow;
+                document.getElementById('hand' + handNum.toString()).style.color ='#0099ff';
+                hid = "#hand" + handNum.toString() + "pic"
+                $(hid).animate({boxShadow: '0px 0px 0px #000000', top: '10px'}, 250);
+                hand_active[handNum] = 1
+        }
+        document.getElementById('power').innerHTML = power;
+}
+
+function pickHero(){
+        if(document.getElementById("heroPicker").style.display != "none" && document.getElementById("room").innerHTML != ""){
+        socket.emit("pickHero");
+        document.getElementById("heroPicker").style.display = 'none';
+        }
+};
+
+function sendMessage(msg) {
+        document.getElementById('chatMsg').value = "";
+        if(msg != "") {
+        socket.emit('chat', {
+                message: msg
+        });
+        }
+};
+
+function changeName(name) {
+        if(name != "") {
+                socket.emit('newName', {
+                newname: name
+        });
+        }
+}
+
+$(document).ready(function(){
+    $(".form-control").focus(function(){
+        $(this).css("background-color", "#cccccc");
+    });
+    $(".form-control").blur(function(){
+        $(this).css("background-color", "#ffffff");
+    });
+});
+</script>
+
+<style>
+        #endTurnButton, #kick, #unkick {
+                box-shadow: 5px 5px 10px #000000;
+                top: 0px;
+                position: relative;
+        }
+
+        .btn:focus {
+                outline: none;
+                color:white;
+        }
+
+        .handPic, .linePic {
+                width: 125px;
+                box-shadow: 15px 15px 35px #000000;
+                position: relative;
+                top: 0px;
+        }
+        .line {
+                cursor: pointer;
+                float: left;
+                font-size: 100%;
+                margin-left: 20px;
+        }
+        div h3, p, h2 {
+                color: white;
+        }
+
+        #center{
+                float: left;
+        }
+        .hero{
+                display: none;
+                width: 100%;
+                height: calc( 100% - 470px);
+        }
+        #leftSide {
+                width: 350px;
+                height: 100vh;
+                float: left;
+        }
+        ul{
+                max-height: 400px;
+                overflow: auto;
+                border-radius: 0px;
+        }
+        .list-group-item{
+        background-color: transparent;
+        color: white;
+        padding: 2px;
+        border: 3px;
+        border-top: none;
+        word-wrap: break-word;
+        }
+        #chatMsg, #nameChange{
+                display: inline-block;
+                width: 215px;
+                padding: 0px;
+                margin: 0px;
+                border-radius: 0px;
+        }
+        .btn{
+                background-color: #F34A17;
+                color: white;
+                display: inline-block;
+                width: 130px;
+                padding: 6px;
+                margin:0px;
+                border-radius: 0px;
+        }
+        .btn:hover{
+                color:white;
+                background-color: #000000;
+        }
+        #superChat {
+                box-shadow: 10px 10px 20px #212121;
+                width: 350px;
+                height: 470px;
+                background-size: 350px 470px;
+                background: 
+                /* top, transparent red, faked with gradient */ 
+                linear-gradient(
+                rgba(58, 58, 58, 0.65), 
+                rgba(58, 58, 58, 0.65)
+                ),
+                /* bottom, image */
+                url("https://cryptozoic.com/sites/default/files/gallery/dc2_2.5x3.5_cards_back.jpg");
+                        }
+</style>
+</html>
